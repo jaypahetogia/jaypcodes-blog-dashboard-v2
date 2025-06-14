@@ -185,5 +185,6 @@ class AzureBlogService {
   }
 }
 
-// Export singleton instance
-export default new AzureBlogService();
+// Create and export singleton instance
+const azureBlogService = new AzureBlogService();
+export default azureBlogService;
