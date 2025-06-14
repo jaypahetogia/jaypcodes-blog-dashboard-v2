@@ -94,7 +94,7 @@ class AzureBlogService {
       console.log(`Approving blog with ID: ${blogId}`);
       
       const response = await this.axiosInstance.post('/ApproveBlog', {
-        blogId: blogId,
+        draftId: blogId,
         action: 'approve'
       });
       
