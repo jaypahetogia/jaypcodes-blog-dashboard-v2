@@ -14,7 +14,7 @@ const BlogDashboard = () => {
   useEffect(() => {
     loadBlogs();
     checkConnection();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const checkConnection = async () => {
     try {
