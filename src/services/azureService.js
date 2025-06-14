@@ -93,8 +93,8 @@ class AzureBlogService {
     try {
       console.log(`Approving blog with ID: ${blogId}`);
       
-      const response = await this.axiosInstance.post('/ApproveBlog', {
-        draftId: blogId,
+      // Try sending as query parameter since it might be expected as a URL parameter
+      const response = await this.axiosInstance.post(`/ApproveBlog?draftId=${blogId}`, {
         action: 'approve'
       });
       
@@ -102,9 +102,12 @@ class AzureBlogService {
       return { success: true, data: response.data };
     } catch (error) {
       console.error('Error approving blog:', error);
+      console.error('Error response data:', error.response?.data);
+      console.error('Error response status:', error.response?.status);
+      
       return { 
         success: false, 
-        error: error.response?.data?.message || error.message 
+        error: error.response?.data?.error || error.response?.data?.message || error.message 
       };
     }
   }
