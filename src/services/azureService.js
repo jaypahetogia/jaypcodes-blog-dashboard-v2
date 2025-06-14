@@ -1,190 +1,189 @@
-// Azure Blob Storage Integration Service
-// This service connects your dashboard to your Azure Functions and Blob Storage
+import axios from 'axios';
 
-const AZURE_FUNCTIONS = {
-  RSS_READER: 'https://jaypcodes-blog-functions-v2.azurewebsites.net/api/RSSFeedReader',
-  APPROVE_BLOG: 'https://jaypcodes-blog-functions-v2.azurewebsites.net/api/ApproveBlog',
-  MOCK_GENERATOR: 'https://jaypcodes-blog-functions-v2.azurewebsites.net/api/MockBlogGenerator',
-  SCHEDULER: 'https://jaypcodes-blog-functions-v2.azurewebsites.net/api/MonthlyBlogScheduler'
-};
+class AzureBlogService {
+  constructor() {
+    // Use relative URLs - Static Web Apps will proxy to linked Function App
+    this.baseURL = '/api';
+    
+    // No need for function keys when using linked Function App
+    // Static Web Apps handles authentication automatically
+    
+    this.axiosInstance = axios.create({
+      baseURL: this.baseURL,
+      timeout: 30000,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
 
-const FUNCTION_KEYS = {
-  RSS_READER: '_A6sI4sP0n52Urqn1ELXhumTym6Iok80m-snS6bJYC35AzFu4jUm8g',
-  APPROVE_BLOG: '6lwd4VMOXIcoPNMt2R_Ag3PRp1ytbT_6aG2rZI44XiYqAzFuKoJ_ag',
-  MOCK_GENERATOR: 'bUCtFL243vwjxUcVQYaSh8_yHCLwWS1oGVAcrDQ4uWPbAzFuxKZ_Eg',
-  SCHEDULER: 'Xm8pJSuXzFE2_HLKhH7Of-yeYMGRMpGyLSl3Twxkg7C7AzFudWu3Lw'
-};
+    // Add request interceptor for logging
+    this.axiosInstance.interceptors.request.use(
+      (config) => {
+        console.log(`Making API call to: ${config.baseURL}${config.url}`);
+        return config;
+      },
+      (error) => {
+        console.error('Request error:', error);
+        return Promise.reject(error);
+      }
+    );
 
-export class AzureBlogService {
-  
+    // Add response interceptor for error handling
+    this.axiosInstance.interceptors.response.use(
+      (response) => {
+        console.log(`API response from ${response.config.url}:`, response.status);
+        return response;
+      },
+      (error) => {
+        console.error('API Error:', error.response?.data || error.message);
+        return Promise.reject(error);
+      }
+    );
+  }
+
+  // Test connection to linked Function App
+  async healthCheck() {
+    try {
+      // Try to call RSSFeedReader as a health check
+      const response = await this.axiosInstance.get('/RSSFeedReader');
+      console.log('Health check successful:', response.data);
+      return { status: 'connected', data: response.data };
+    } catch (error) {
+      console.error('Health check failed:', error);
+      return { status: 'error', error: error.message };
+    }
+  }
+
+  // Fetch blog drafts from Azure Blob Storage via RSSFeedReader
   async fetchBlogDrafts() {
     try {
-      const response = await fetch(`${AZURE_FUNCTIONS.RSS_READER}?action=listDrafts`, {
-        method: 'GET',
-        headers: {
-          'x-functions-key': FUNCTION_KEYS.RSS_READER,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      console.log('Fetching blog drafts from linked Function App...');
+      
+      // Call your RSSFeedReader function which reads from blob storage
+      const response = await this.axiosInstance.get('/RSSFeedReader');
+      
+      if (response.data) {
+        // Transform the response to match your dashboard format
+        const blogs = Array.isArray(response.data) ? response.data : [response.data];
+        
+        return blogs.map(blog => ({
+          id: blog.id || Math.random().toString(36).substr(2, 9),
+          title: blog.title || 'Untitled Blog Post',
+          content: blog.content || blog.description || 'No content available',
+          status: blog.status || 'draft',
+          createdDate: blog.createdDate || blog.publishDate || new Date().toISOString(),
+          author: blog.author || 'JayPCodes',
+          category: blog.category || 'Technology',
+          readTime: blog.readTime || '5 min read'
+        }));
       }
-
-      const data = await response.json();
-      return data.blogs || [];
+      
+      return [];
     } catch (error) {
       console.error('Error fetching blog drafts:', error);
+      
+      // Fallback to mock data if real API fails
+      console.log('Falling back to mock data...');
       return this.getMockBlogs();
     }
   }
 
+  // Approve a blog post using ApproveBlog function
   async approveBlog(blogId) {
     try {
-      const response = await fetch(AZURE_FUNCTIONS.APPROVE_BLOG, {
-        method: 'POST',
-        headers: {
-          'x-functions-key': FUNCTION_KEYS.APPROVE_BLOG,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          blogId: blogId,
-          action: 'approve'
-        })
+      console.log(`Approving blog with ID: ${blogId}`);
+      
+      const response = await this.axiosInstance.post('/ApproveBlog', {
+        blogId: blogId,
+        action: 'approve'
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result;
+      
+      console.log('Blog approved successfully:', response.data);
+      return { success: true, data: response.data };
     } catch (error) {
       console.error('Error approving blog:', error);
-      throw error;
+      return { 
+        success: false, 
+        error: error.response?.data?.message || error.message 
+      };
     }
   }
 
+  // Generate a test blog using MockBlogGenerator
   async generateTestBlog() {
     try {
-      const response = await fetch(AZURE_FUNCTIONS.MOCK_GENERATOR, {
-        method: 'POST',
-        headers: {
-          'x-functions-key': FUNCTION_KEYS.MOCK_GENERATOR,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          trigger: 'manual',
-          source: 'dashboard'
-        })
+      console.log('Generating test blog...');
+      
+      const response = await this.axiosInstance.post('/MockBlogGenerator', {
+        topic: 'Azure Development',
+        generateContent: true
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      return result;
+      
+      console.log('Test blog generated:', response.data);
+      return { success: true, data: response.data };
     } catch (error) {
       console.error('Error generating test blog:', error);
-      throw error;
+      return { 
+        success: false, 
+        error: error.response?.data?.message || error.message 
+      };
     }
   }
 
+  // Trigger monthly blog scheduler
+  async triggerMonthlyScheduler() {
+    try {
+      console.log('Triggering monthly blog scheduler...');
+      
+      const response = await this.axiosInstance.post('/MonthlyBlogScheduler');
+      
+      console.log('Monthly scheduler triggered:', response.data);
+      return { success: true, data: response.data };
+    } catch (error) {
+      console.error('Error triggering monthly scheduler:', error);
+      return { 
+        success: false, 
+        error: error.response?.data?.message || error.message 
+      };
+    }
+  }
+
+  // Mock data fallback (same as before)
   getMockBlogs() {
     return [
       {
-        id: 'blog-2025-01-15-001',
-        title: 'The Future of Cloud Computing: Azure Innovations in 2025',
-        summary: 'Exploring the latest Azure features and innovations that are shaping the future of cloud computing...',
-        content: `<h1>The Future of Cloud Computing: Azure Innovations in 2025</h1>
-        
-        <p>Cloud computing continues to evolve at an unprecedented pace, and Microsoft Azure is at the forefront of this transformation. In 2025, we're witnessing groundbreaking innovations that are reshaping how businesses approach digital infrastructure.</p>
-        
-        <h2>Key Innovations This Year</h2>
-        <ul>
-          <li><strong>Azure Quantum Computing Services</strong> - Making quantum computing accessible to developers</li>
-          <li><strong>Enhanced AI Integration</strong> - Deeper integration with GPT models and custom AI solutions</li>
-          <li><strong>Sustainability Initiatives</strong> - Carbon-negative cloud operations by 2030</li>
-          <li><strong>Edge Computing Expansion</strong> - Bringing compute closer to users worldwide</li>
-        </ul>
-        
-        <h2>Impact on Businesses</h2>
-        <p>These innovations are enabling businesses to:</p>
-        <ul>
-          <li>Reduce operational costs by up to 40%</li>
-          <li>Improve application performance and user experience</li>
-          <li>Accelerate time-to-market for new products</li>
-          <li>Enhance security and compliance capabilities</li>
-        </ul>
-        
-        <p>As we move forward, the integration of AI, quantum computing, and edge technologies will continue to drive innovation across industries.</p>`,
-        createdDate: '2025-01-15T09:00:00Z',
+        id: 'mock-1',
+        title: 'Building Scalable Azure Functions for Blog Automation',
+        content: `This blog post explores how to create robust Azure Functions that can automatically process RSS feeds and generate blog content. We'll cover best practices for serverless architecture, error handling, and integration with Azure Storage...`,
         status: 'draft',
-        source: 'TechCrunch',
-        tags: ['Azure', 'Cloud Computing', 'Innovation', 'AI']
+        createdDate: '2025-06-14T10:30:00Z',
+        author: 'JayPCodes',
+        category: 'Azure Development',
+        readTime: '8 min read'
       },
       {
-        id: 'blog-2025-01-14-002',
-        title: 'Serverless Architecture Best Practices with Azure Functions',
-        summary: 'A comprehensive guide to building scalable serverless applications using Azure Functions...',
-        content: `<h1>Serverless Architecture Best Practices with Azure Functions</h1>
-        
-        <p>Serverless computing has revolutionized how we build and deploy applications. Azure Functions provides a powerful platform for creating event-driven, scalable solutions without managing infrastructure.</p>
-        
-        <h2>Core Benefits of Serverless</h2>
-        <ul>
-          <li><strong>Cost Efficiency</strong> - Pay only for execution time</li>
-          <li><strong>Automatic Scaling</strong> - Handle traffic spikes seamlessly</li>
-          <li><strong>Reduced Maintenance</strong> - Focus on code, not infrastructure</li>
-          <li><strong>Faster Development</strong> - Rapid prototyping and deployment</li>
-        </ul>`,
-        createdDate: '2025-01-14T14:30:00Z',
+        id: 'mock-2', 
+        title: 'React Dashboard Integration with Azure Static Web Apps',
+        content: `Learn how to build a professional dashboard that integrates seamlessly with Azure Functions. This comprehensive guide covers authentication, API integration, and deployment strategies...`,
         status: 'draft',
-        source: 'The Verge',
-        tags: ['Serverless', 'Azure Functions', 'Architecture', 'Best Practices']
+        createdDate: '2025-06-13T15:45:00Z',
+        author: 'JayPCodes',
+        category: 'Frontend Development',
+        readTime: '6 min read'
       },
       {
-        id: 'blog-2025-01-13-003',
-        title: 'Azure DevOps: Streamlining CI/CD Pipelines',
-        summary: 'Learn how to create efficient CI/CD pipelines using Azure DevOps...',
-        content: `<h1>Azure DevOps: Streamlining CI/CD Pipelines for Modern Development</h1>`,
-        createdDate: '2025-01-13T11:15:00Z',
+        id: 'mock-3',
+        title: 'Automated Content Generation with AI and Azure',
+        content: `Discover how to leverage AI services within Azure to automatically generate engaging blog content. We'll explore OpenAI integration, content quality controls, and automated publishing workflows...`,
         status: 'published',
-        source: 'Azure Blog',
-        tags: ['DevOps', 'CI/CD', 'Azure Pipelines', 'Automation']
+        createdDate: '2025-06-12T09:15:00Z',
+        author: 'JayPCodes',
+        category: 'AI & Machine Learning',
+        readTime: '10 min read'
       }
     ];
   }
-
-  async healthCheck() {
-    const checks = [];
-    
-    for (const [name, url] of Object.entries(AZURE_FUNCTIONS)) {
-      try {
-        const response = await fetch(`${url}?healthCheck=true`, {
-          method: 'GET',
-          headers: {
-            'x-functions-key': FUNCTION_KEYS[name] || FUNCTION_KEYS.RSS_READER
-          }
-        });
-        
-        checks.push({
-          service: name,
-          status: response.ok ? 'healthy' : 'unhealthy',
-          statusCode: response.status
-        });
-      } catch (error) {
-        checks.push({
-          service: name,
-          status: 'error',
-          error: error.message
-        });
-      }
-    }
-    
-    return checks;
-  }
 }
 
-export const azureBlogService = new AzureBlogService();
+// Export singleton instance
+export default new AzureBlogService();
