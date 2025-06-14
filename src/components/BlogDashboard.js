@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, CheckCircle, XCircle, Clock, Eye, Calendar, User, RefreshCw, Plus, AlertCircle } from 'lucide-react';
-import { azureBlogService } from '../services/azureService';
+import azureBlogService from '../services/azureService';
 
 const BlogDashboard = () => {
   const [blogs, setBlogs] = useState([]);
