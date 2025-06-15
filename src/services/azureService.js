@@ -54,39 +54,46 @@ class AzureBlogService {
     }
   }
 
-  // Fetch blog drafts from Azure Blob Storage via RSSFeedReader
+  // Fetch blog drafts from Azure Blob Storage via BlogDraftsReader
   async fetchBlogDrafts() {
     try {
       console.log('Fetching blog drafts from linked Function App...');
       
-      // Call your RSSFeedReader function which reads from blob storage
-      const response = await this.axiosInstance.get('/RSSFeedReader');
+      // Call the new BlogDraftsReader function which reads actual drafts from blob storage
+      const response = await this.axiosInstance.get('/BlogDraftsReader');
+      console.log('BlogDraftsReader response:', response.data);
       
-      if (response.data) {
+      if (response.data && response.data.length > 0) {
         // Transform the response to match your dashboard format
         const blogs = Array.isArray(response.data) ? response.data : [response.data];
         
-        return blogs.map(blog => ({
-          // Use the actual draftId from the blob file, not a random ID
-          id: blog.draftId || blog.id || Math.random().toString(36).substr(2, 9),
-          title: blog.blogPost?.title || blog.title || 'Untitled Blog Post',
-          content: blog.blogPost?.content || blog.content || blog.description || 'No content available',
-          status: blog.blogPost?.status || blog.status || 'draft',
-          createdDate: blog.createdAt || blog.blogPost?.generatedAt || blog.createdDate || blog.publishDate || new Date().toISOString(),
-          author: blog.author || 'JayPCodes',
-          category: blog.blogPost?.category || blog.category || 'Technology',
-          readTime: blog.blogPost?.estimatedReadTime ? `${blog.blogPost.estimatedReadTime} min read` : '5 min read',
-          // Handle tags safely
-          tags: blog.blogPost?.tags || blog.tags || []
-        }));
+        const transformedBlogs = blogs.map(blog => {
+          console.log('Processing blog:', blog);
+          return {
+            // Use the actual draftId from the blob file
+            id: blog.draftId,
+            title: blog.blogPost?.title || 'Untitled Blog Post',
+            content: blog.blogPost?.content || 'No content available',
+            status: blog.blogPost?.status || blog.status || 'draft',
+            createdDate: blog.createdAt || blog.blogPost?.generatedAt || new Date().toISOString(),
+            author: 'JayPCodes',
+            category: blog.blogPost?.category || 'Technology',
+            readTime: blog.blogPost?.estimatedReadTime ? `${blog.blogPost.estimatedReadTime} min read` : '5 min read',
+            tags: blog.blogPost?.tags || []
+          };
+        });
+        
+        console.log('Transformed blogs:', transformedBlogs);
+        return transformedBlogs;
       }
       
-      return [];
+      console.log('No drafts found, using mock data');
+      return this.getMockBlogs();
     } catch (error) {
       console.error('Error fetching blog drafts:', error);
       
       // Fallback to mock data if real API fails
-      console.log('Falling back to mock data...');
+      console.log('Falling back to mock data due to error...');
       return this.getMockBlogs();
     }
   }
