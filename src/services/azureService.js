@@ -67,14 +67,17 @@ class AzureBlogService {
         const blogs = Array.isArray(response.data) ? response.data : [response.data];
         
         return blogs.map(blog => ({
-          id: blog.id || Math.random().toString(36).substr(2, 9),
-          title: blog.title || 'Untitled Blog Post',
-          content: blog.content || blog.description || 'No content available',
-          status: blog.status || 'draft',
-          createdDate: blog.createdDate || blog.publishDate || new Date().toISOString(),
+          // Use the actual draftId from the blob file, not a random ID
+          id: blog.draftId || blog.id || Math.random().toString(36).substr(2, 9),
+          title: blog.blogPost?.title || blog.title || 'Untitled Blog Post',
+          content: blog.blogPost?.content || blog.content || blog.description || 'No content available',
+          status: blog.blogPost?.status || blog.status || 'draft',
+          createdDate: blog.createdAt || blog.blogPost?.generatedAt || blog.createdDate || blog.publishDate || new Date().toISOString(),
           author: blog.author || 'JayPCodes',
-          category: blog.category || 'Technology',
-          readTime: blog.readTime || '5 min read'
+          category: blog.blogPost?.category || blog.category || 'Technology',
+          readTime: blog.blogPost?.estimatedReadTime ? `${blog.blogPost.estimatedReadTime} min read` : '5 min read',
+          // Handle tags safely
+          tags: blog.blogPost?.tags || blog.tags || []
         }));
       }
       
